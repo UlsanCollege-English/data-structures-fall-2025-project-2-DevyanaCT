@@ -1,36 +1,60 @@
-# Generate a 50,000‑word frequency snapshot using wordfreq.
-# Run locally once, commit the output to data/words.csv. Not used by tests at runtime.
+"""
+Utility script to produce a snapshot CSV of common English words
+with approximate usage scores.
 
+Requires:
+    pip install wordfreq
 
-from __future__ import annotations
+Note: This is a setup tool, not part of the main application runtime.
+"""
 
-
-import csv
 from pathlib import Path
+import csv
+import sys
+
+# This import happens once up front; checked again in __main__.
+import wordfreq
 
 
-# Optional: import inside main to avoid import error when module is inspected without wordfreq installed.
+# Output file location
+TARGET = Path(__file__).resolve().parents[1] / "data" / "words.csv"
+LIMIT = 50_000
 
 
-def main():
+def build_list():
+    """
+    Retrieve top English words and write them to a CSV file.
+    """
+    print(f"Preparing word list (~{LIMIT} entries)...")
+
+    words = wordfreq.top_n_list("en", n=LIMIT, wordlist="best")
+
+    # Make sure data folder exists
+    TARGET.parent.mkdir(exist_ok=True)
+
     try:
-        from wordfreq import top_n_list, zipf_frequency
-    except Exception as e:
-        raise SystemExit("Install wordfreq first: pip install wordfreq") from e
+        with TARGET.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.writer(file)
+            for w in words:
+                score = wordfreq.zipf_frequency(w, "en")
+                writer.writerow([w, score])
+
+        print(f"Done → {TARGET}")
+        print(f"Wrote {len(words)} words.")
+
+    except OSError as err:
+        print(f"Could not write to {TARGET}: {err}")
+    except Exception as err:
+        print(f"Unexpected error: {err}")
 
 
-    words = top_n_list('en', 50_000)
-    out_path = Path(__file__).resolve().parent.parent / 'data' / 'words.csv'
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+if __name__ == "__main__":
+    # Double-check dependency is present when run directly
+    try:
+        import wordfreq as _check
+    except ImportError:
+        print("Missing dependency 'wordfreq'. Install with:")
+        print("    pip install wordfreq")
+        sys.exit(1)
 
-    with out_path.open('w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        for w in words:
-            writer.writerow([w, f"{zipf_frequency(w, 'en'):.6f}"])
-
-
-        print(f"Wrote {len(words)} rows to {out_path}")
-
-
-if __name__ == '__main__':
-    main()
+    build_list()
